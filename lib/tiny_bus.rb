@@ -20,9 +20,9 @@ require 'tiny_log'
 #   t.msg({'topic' => 'whatever', 'details' => 'Historic happenings!}) # goes to dead letter output, or raises exception, depending on the configuration
 #
 # Initialization options:
-#   TinyBus.new(log: <some object that responds to #puts>)               # will send a copy of all successful messages to the log
-#   TinyBus.new(dead: <some object that responds to #puts>)              # will send a copy of all unsuccessful messages to the dead object
-#   TinyBus.new(raise_on_dead: true)                                     # strict mode for undeliverable messages, defaults to false
+#   TinyBus.new(log: <a filename for log output>)                 # will log all normal msgs in this file
+#   TinyBus.new(dead: <a filename for dead message log output>)   # will log all undeliverable msgs in this file
+#   TinyBus.new(raise_on_dead: true)                              # strict mode for undeliverable messages, defaults to false
 class TinyBus
   # log:
   #   if specified it should be a valid filename
@@ -37,8 +37,8 @@ class TinyBus
   def initialize(log: nil, dead: nil, raise_on_dead: false)
     @subs = {}
     @stats = { '.dead' => 0 }
-    @log = log ? TinyLog.new(log) : $stdout
-    @dead = dead ? File.open(dead, 'a') : $stderr
+    @log = log ? TinyLog.new(log) : TinyLog.new($stdout)
+    @dead = dead ? File.open(dead, 'a') : TinyLog.new($stderr)
     @raise_on_dead = raise_on_dead
   end
 
@@ -69,7 +69,7 @@ class TinyBus
   #
   # NOTE: it modifies the incoming msg object in place in order to avoid
   # unnecessary object allocations
-  def msg(msg)
+  def msg(msg, lvl='info')
     topic = msg['topic']
 
     raise TinyBus::SendToDotTopicError.new("Cannot send to dot topic `#{topic}', because those are reserved for internal use") if topic.start_with?('.')
@@ -84,13 +84,13 @@ class TinyBus
     if subbers
       @stats[topic] += 1
       subbers.each{|s| s.msg(annotated) }
-      @log.puts annotated
+      @log.send(lvl, annotated)
     else
       if @raise_on_dead
         raise TinyBus::DeadMsgError.new("Could not deliver message to topic `#{topic}'")
       else
         @stats['.dead'] += 1
-        @dead.puts annotated
+        @dead.send(lvl, annotated)
       end
     end
   end
