@@ -6,23 +6,23 @@ require 'tiny_log'
 # This class implements a very simpler PubSub system where:
 # - subscribers can subscribe via the #sub method
 # - subscribers can unsubscribe via the #unsub method
-# - msgs can enter the MsgBus via the #msg method
+# - msgs can enter the TinyBus via the #msg method
 #
-# The messages that come into this MsgBus are assumed to be Hash-like, in the
+# The messages that come into this TinyBus are assumed to be Hash-like, in the
 # sense that they have a 'topic' key that can be accessed using Hash-like key
 # access syntax, and that the 'topic' key will serve as the method of
 # distribution.
 #
 # Usage:
-#   mb = MsgBus.new
-#   mb.sub('news', <some object that responds to #msg)
-#   mb.msg({'topic' => 'news', 'details' => 'Historic happenings!})     # goes to 'news' subscribers
-#   mb.msg({'topic' => 'whatever', 'details' => 'Historic happenings!}) # goes to dead letter output, or raises exception, depending on the configuration
+#   t = TinyBus.new
+#   t.sub('news', <some object that responds to #msg)
+#   t.msg({'topic' => 'news', 'details' => 'Historic happenings!})     # goes to 'news' subscribers
+#   t.msg({'topic' => 'whatever', 'details' => 'Historic happenings!}) # goes to dead letter output, or raises exception, depending on the configuration
 #
 # Initialization options:
-#   MsgBus.new(log: <some object that responds to #puts>)               # will send a copy of all successful messages to the log
-#   MsgBus.new(dead: <some object that responds to #puts>)              # will send a copy of all unsuccessful messages to the dead object
-#   MsgBus.new(raise_on_dead: true)                                     # strict mode for undeliverable messages, defaults to false
+#   TinyBus.new(log: <some object that responds to #puts>)               # will send a copy of all successful messages to the log
+#   TinyBus.new(dead: <some object that responds to #puts>)              # will send a copy of all unsuccessful messages to the dead object
+#   TinyBus.new(raise_on_dead: true)                                     # strict mode for undeliverable messages, defaults to false
 class TinyBus
   # log:
   #   if specified it should be a valid filename
@@ -45,11 +45,11 @@ class TinyBus
   # adds a subscriber to a topic
   #
   # topics can be any string that doesn't start with a dot (.) - dot topics are
-  # reserved for internal MsgBus usage, such as:
+  # reserved for internal TinyBus usage, such as:
   # - .log
   def sub(topic, subber)
-    raise SubscriptionToDotTopicError.new("Cannot subscribe to dot topic `#{topic}', because these are reserved for internal use") if topic.start_with?('.')
-    raise SubscriberDoesNotMsg.new("The specified subscriber type `#{subber.class.inspect}' does not respond to #msg") unless subber.respond_to?(:msg)
+    raise TinyBus::SubscriptionToDotTopicError.new("Cannot subscribe to dot topic `#{topic}', because these are reserved for internal use") if topic.start_with?('.')
+    raise TinyBus::SubscriberDoesNotMsg.new("The specified subscriber type `#{subber.class.inspect}' does not respond to #msg") unless subber.respond_to?(:msg)
 
     @subs[topic] ||= Set.new
     @subs[topic] << subber
@@ -84,7 +84,7 @@ class TinyBus
       @log.puts annotated
     else
       if @raise_on_dead
-        raise DeadMsgException.new("Could not deliver message to topic `#{t}'")
+        raise TinyBus::DeadMsgError.new("Could not deliver message to topic `#{t}'")
       else
         @stats['.dead'] += 1
         @dead.puts annotated
@@ -92,13 +92,16 @@ class TinyBus
     end
   end
 
+  # helpful for debugging, gives you a count of the number of messages sent to
+  # each topic, including the .dead topic, which is where messages go where
+  # there are no subscribes for a given topic
   def to_s
     <<~DEBUG
-    MsgBus stats: #{@subs.keys.length > 0 ? "\n  " + @stats.keys.sort.map{|t| "#{t.rjust(12)}: #{@stats[t]}" }.join("\n  ") : '<NONE>'}
+    TinyBus stats: #{@subs.keys.length > 0 ? "\n  " + @stats.keys.sort.map{|t| "#{t.rjust(12)}: #{@stats[t]}" }.join("\n  ") : '<NONE>'}
     DEBUG
   end
 end
 
-class DeadMsgError < RuntimeError; end
-class SubscriptionToDotTopicError < RuntimeError; end
-class SubscriberDoesNotMsg < RuntimeError; end
+class TinyBus::DeadMsgError < RuntimeError; end
+class TinyBus::SubscriptionToDotTopicError < RuntimeError; end
+class TinyBus::SubscriberDoesNotMsg < RuntimeError; end

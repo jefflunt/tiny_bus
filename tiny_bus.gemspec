@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = "tiny_bus"
-  s.version     = "1.0.0"
+  s.version     = "1.0.1"
   s.summary     = "a tiny pubsub message bus with almost no features"
   s.description = "want to have an in-memory message bus that takes hash-like objects and distributes them out to subscribers based on a 'topic' key, with logging to $stdout or a file, and absolutely nothing else? then this library is for you"
   s.authors     = ["Jeff Lunt"]
