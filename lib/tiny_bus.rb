@@ -48,7 +48,7 @@ class TinyBus
   # reserved for internal TinyBus usage, such as:
   # - .log
   def sub(topic, subber)
-    raise TinyBus::SubscriptionToDotTopicError.new("Cannot subscribe to dot topic `#{topic}', because these are reserved for internal use") if topic.start_with?('.')
+    raise TinyBus::SubscriptionToDotTopicError.new("Cannot subscribe to dot topic `#{topic}', because those are reserved for internal use") if topic.start_with?('.')
     raise TinyBus::SubscriberDoesNotMsg.new("The specified subscriber type `#{subber.class.inspect}' does not respond to #msg") unless subber.respond_to?(:msg)
 
     @subs[topic] ||= Set.new
@@ -70,8 +70,11 @@ class TinyBus
   # NOTE: it modifies the incoming msg object in place in order to avoid
   # unnecessary object allocations
   def msg(msg)
-    t = msg['topic']
-    subbers = @subs[t]
+    topic = msg['topic']
+
+    raise TinyBus::SendToDotTopicError.new("Cannot send to dot topic `#{topic}', because those are reserved for internal use") if topic.start_with?('.')
+
+    subbers = @subs[topic]
 
     annotated = msg.merge!({
                 '.time' => Time.now.utc.iso8601(6),
@@ -79,12 +82,12 @@ class TinyBus
               })
 
     if subbers
-      @stats[t] += 1
+      @stats[topic] += 1
       subbers.each{|s| s.msg(annotated) }
       @log.puts annotated
     else
       if @raise_on_dead
-        raise TinyBus::DeadMsgError.new("Could not deliver message to topic `#{t}'")
+        raise TinyBus::DeadMsgError.new("Could not deliver message to topic `#{topic}'")
       else
         @stats['.dead'] += 1
         @dead.puts annotated
@@ -105,3 +108,4 @@ end
 class TinyBus::DeadMsgError < RuntimeError; end
 class TinyBus::SubscriptionToDotTopicError < RuntimeError; end
 class TinyBus::SubscriberDoesNotMsg < RuntimeError; end
+class TinyBus::SendToDotTopicError< RuntimeError; end
