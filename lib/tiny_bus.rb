@@ -38,7 +38,7 @@ class TinyBus
     @subs = {}
     @stats = { '.dead' => 0 }
     @log = log ? TinyLog.new(log) : TinyLog.new($stdout)
-    @dead = dead ? File.open(dead, 'a') : TinyLog.new($stderr)
+    @dead = dead ? TinyLog.new(dead) : TinyLog.new($stderr)
     @raise_on_dead = raise_on_dead
   end
 
@@ -84,13 +84,13 @@ class TinyBus
     if subbers
       @stats[topic] += 1
       subbers.each{|s| s.msg(annotated) }
-      @log.send(lvl, annotated)
+      @log.sent annotated
     else
       if @raise_on_dead
         raise TinyBus::DeadMsgError.new("Could not deliver message to topic `#{topic}'")
       else
         @stats['.dead'] += 1
-        @dead.send(lvl, annotated)
+        @dead.dead annotated
       end
     end
   end
