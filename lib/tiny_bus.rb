@@ -3,6 +3,8 @@ require 'set'
 require 'securerandom'
 require 'tiny_log'
 
+# NOTE: This library depends on the TinyLog library.
+#
 # This class implements a very simpler PubSub system where:
 # - subscribers can subscribe via the #sub method
 # - subscribers can unsubscribe via the #unsub method
@@ -25,11 +27,11 @@ require 'tiny_log'
 #   TinyBus.new(raise_on_dead: true)                              # strict mode for undeliverable messages, defaults to false
 class TinyBus
   # log:
-  #   if specified it should be a valid filename
-  #   if not specified will default to $stdout
+  #   if specified, it should be a TinyLog instance
+  #   if not specified, it will create a new TinyLog instance for $stdout
   # dead:
-  #   if specified it should be a valid filename for dead letter logging
-  #   if not specified will default to $stderr
+  #   if specified, it should be a TinyLog instance
+  #   if not specified, it will create a new TinyLog instance for $stderr
   # raise_on_dead:
   #   kind of a strict mode. if false, then messages with a topic with no
   #   subscribers will go to the dead file. if true, then messages with a topic
@@ -37,8 +39,8 @@ class TinyBus
   def initialize(log: nil, dead: nil, raise_on_dead: false)
     @subs = {}
     @stats = { '.dead' => 0 }
-    @log = log ? TinyLog.new(log) : TinyLog.new($stdout)
-    @dead = dead ? TinyLog.new(dead) : TinyLog.new($stderr)
+    @log = log || TinyLog.new($stdout)
+    @dead = dead || TinyLog.new($stderr)
     @raise_on_dead = raise_on_dead
   end
 
