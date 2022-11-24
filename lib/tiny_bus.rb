@@ -2,6 +2,7 @@ require 'time'
 require 'set'
 require 'securerandom'
 require 'tiny_log'
+require 'tiny_pipe'
 
 # NOTE: This library depends on the TinyLog library.
 #
@@ -11,20 +12,20 @@ require 'tiny_log'
 # - msgs can enter the TinyBus via the #msg method
 #
 # The messages that come into this TinyBus are assumed to be Hash-like, in the
-# sense that they have a 'topic' key that can be accessed using Hash-like key
-# access syntax, and that the 'topic' key will serve as the method of
+# sense that they have a '.topic' key that can be accessed using Hash-like key
+# access syntax, and that the '.topic' key will serve as the method of
 # distribution.
 #
 # Usage:
 #   t = TinyBus.new
 #   t.sub('news', <some object that responds to #msg)
-#   t.msg({'topic' => 'news', 'details' => 'Historic happenings!})     # goes to 'news' subscribers
-#   t.msg({'topic' => 'whatever', 'details' => 'Historic happenings!}) # goes to dead letter output, or raises exception, depending on the configuration
+#   t.msg({'.topic' => 'news', 'details' => 'Historic happenings!})     # goes to 'news' subscribers
+#   t.msg({'.topic' => 'whatever', 'details' => 'Historic happenings!}) # goes to dead letter output, or raises exception, depending on the configuration
 #
 # Initialization options:
-#   TinyBus.new(log: <a filename for log output>)                 # will log all normal msgs in this file
-#   TinyBus.new(dead: <a filename for dead message log output>)   # will log all undeliverable msgs in this file
-#   TinyBus.new(raise_on_dead: true)                              # strict mode for undeliverable messages, defaults to false
+#   TinyBus.new(log: <a TinyLog for output>)           # will log all normal msgs in this file
+#   TinyBus.new(dead: <a TinyLog for dead messages>)   # will log all undeliverable msgs in this file
+#   TinyBus.new(raise_on_dead: true)                   # strict mode for undeliverable messages, defaults to false
 class TinyBus
   # log:
   #   if specified, it should be a TinyLog instance
@@ -32,12 +33,28 @@ class TinyBus
   # dead:
   #   if specified, it should be a TinyLog instance
   #   if not specified, it will create a new TinyLog instance for $stderr
+  # translator:
+  #   the translator is an instance of TinyPipe, if you want to translate the
+  #   incoming masssage (i.e. annotate with additional fields, change
+  #   keys/values on incoming messges). if not specified no translatioins will
+  #   be made on incoming messages other than the default annotations
+  #   NOTE: all messages are automatically annotated with three fields:
+  #   - .time: the Unix time the message is received in Integer milliseconds,
+  #   - .msg_uuid: a unique UUID for the incoming message
+  #   - .trace: a unique UUID for chains of messages (if not present)
   # raise_on_dead:
-  #   kind of a strict mode. if false, then messages with a topic with no
-  #   subscribers will go to the dead file. if true, then messages with a topic
-  #   with no subscribers will raise an exception.
-  def initialize(log: nil, dead: nil, raise_on_dead: false)
+  #   kind of a strict mode. if false, then messages with a '.topic' with no
+  #   subscribers will go to the dead file. if true, then messages with a
+  #   '.topic' with no subscribers will raise an exception.
+  def initialize(log: nil, dead: nil, translator: nil, raise_on_dead: false)
     @subs = {}
+    @translator = translator
+    @annotator = TinyPipe.new([
+      ->(m){ m['.time'] = (Time.now.to_f * 1000).to_i; m },
+      ->(m){ m['.msg_uuid'] = SecureRandom.uuid; m },
+      ->(m){ m['.trace'] ||= SecureRandom.uuid; m }
+    ])
+
     @stats = { '.dead' => 0 }
     @log = log || TinyLog.new($stdout)
     @dead = dead || TinyLog.new($stderr)
@@ -45,54 +62,52 @@ class TinyBus
   end
 
   # adds a subscriber to a topic
-  #
-  # topics can be any string that doesn't start with a dot (.) - dot topics are
-  # reserved for internal TinyBus usage, such as:
-  # - .log
   def sub(topic, subber)
-    raise TinyBus::SubscriptionToDotTopicError.new("Cannot subscribe to dot topic `#{topic}', because those are reserved for internal use") if topic.start_with?('.')
     raise TinyBus::SubscriberDoesNotMsg.new("The specified subscriber type `#{subber.class.inspect}' does not respond to #msg") unless subber.respond_to?(:msg)
 
     @subs[topic] ||= Set.new
     @subs[topic] << subber
     @stats[topic] ||= 0
+
+    msg({ '.topic' => 'sub', 'to_topic' => topic, 'subber' => subber.to.s })
   end
 
   # removes a subscriber from a topic
   def unsub(topic, subber)
     @subs[topic]&.delete(subber)
+
+    msg({ '.topic' => 'unsub', 'from_topic' => topic, 'subber' => subber.to.s })
   end
 
   # takes an incoming message and distributes it to subscribers
   #
-  # this method also annotates incoming messages with two dot properties:
-  # - .time: the current timestamp, accurate to the microsecond
-  # - .msg_uuid: a UUID to uniquely identify this message
+  # msg: the incoming message to be distributed
+  # lvl (optional): the logging level
   #
   # NOTE: it modifies the incoming msg object in place in order to avoid
   # unnecessary object allocations
+  #
+  # NOTE: keys that begin with dot (.), such as '.time' are reserved for
+  # TinyBus and show not be altered by outside code, otherwise undefined
+  # behavior may result.
   def msg(msg, lvl='info')
-    topic = msg['topic']
+    msg = @annotator.pipe(msg)
+    msg = @translator&.pipe(msg) || msg
 
-    raise TinyBus::SendToDotTopicError.new("Cannot send to dot topic `#{topic}', because those are reserved for internal use") if topic.start_with?('.')
+    topic = msg['topic']
 
     subbers = @subs[topic]
 
-    annotated = msg.merge!({
-                '.time' => Time.now.utc.iso8601(6),
-                '.msg_uuid' => SecureRandom.uuid
-              })
-
     if subbers
       @stats[topic] += 1
-      subbers.each{|s| s.msg(annotated) }
-      @log.sent annotated
+      subbers.each{|s| s.msg(msg) }
+      @log.sent msg
     else
       if @raise_on_dead
         raise TinyBus::DeadMsgError.new("Could not deliver message to topic `#{topic}'")
       else
         @stats['.dead'] += 1
-        @dead.dead annotated
+        @dead.dead msg
       end
     end
   end
@@ -108,6 +123,4 @@ class TinyBus
 end
 
 class TinyBus::DeadMsgError < RuntimeError; end
-class TinyBus::SubscriptionToDotTopicError < RuntimeError; end
 class TinyBus::SubscriberDoesNotMsg < RuntimeError; end
-class TinyBus::SendToDotTopicError< RuntimeError; end
