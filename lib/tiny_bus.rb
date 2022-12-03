@@ -27,6 +27,8 @@ require 'tiny_pipe'
 #   TinyBus.new(dead: <a TinyLog for dead messages>)   # will log all undeliverable msgs in this file
 #   TinyBus.new(raise_on_dead: true)                   # strict mode for undeliverable messages, defaults to false
 class TinyBus
+  ANNOTATION_PREFIX_DEFAULT = '.'
+
   # log:
   #   if specified, it should be a TinyLog instance
   #   if not specified, it will create a new TinyLog instance for $stdout
@@ -46,13 +48,18 @@ class TinyBus
   #   kind of a strict mode. if false, then messages with a '.topic' with no
   #   subscribers will go to the dead file. if true, then messages with a
   #   '.topic' with no subscribers will raise an exception.
-  def initialize(log: nil, dead: nil, translator: nil, raise_on_dead: false)
+  # annotation_prefix:
+  #   default: '.'
+  #   if specified, the annotated message attributes ('.time', '.msg_uuid', and
+  #   '.trace') will have the dot ('.') replaced with the specified prefix text
+  def initialize(log: nil, dead: nil, translator: nil, raise_on_dead: false,
+                 annotation_prefix: ANNOTATION_PREFIX_DEFAULT)
     @subs = {}
     @translator = translator
     @annotator = TinyPipe.new([
-      ->(m){ m['.time'] = (Time.now.to_f * 1000).to_i; m },
-      ->(m){ m['.msg_uuid'] = SecureRandom.uuid; m },
-      ->(m){ m['.trace'] ||= SecureRandom.uuid; m }
+      ->(m){ m[annotation_prefix + 'time'] = (Time.now.to_f * 1000).to_i; m },
+      ->(m){ m[annotation_prefix + 'msg_uuid'] = SecureRandom.uuid; m },
+      ->(m){ m[annotation_prefix + 'trace'] ||= SecureRandom.uuid; m }
     ])
 
     @stats = { '.dead' => 0 }
