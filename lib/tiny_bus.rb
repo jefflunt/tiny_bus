@@ -6,7 +6,7 @@ require 'tiny_pipe'
 
 # NOTE: This library depends on the TinyLog library.
 #
-# This class implements a very simpler PubSub system where:
+# This class implements a very simple PubSub system where:
 # - subscribers can subscribe via the #sub method
 # - subscribers can unsubscribe via the #unsub method
 # - msgs can enter the TinyBus via the #msg method
@@ -56,10 +56,17 @@ class TinyBus
                  annotation_prefix: ANNOTATION_PREFIX_DEFAULT)
     @subs = {}
     @translator = translator
+
+    @dead_key = "#{annotation_prefix}dead"
+    @topic_key = "#{annotation_prefix}topic"
+    @time_key = "#{annotation_prefix}time"
+    @msg_uuid_key = "#{annotation_prefix}msg_uuid"
+    @trace_key = "#{annotation_prefix}trace"
+
     @annotator = TinyPipe.new([
-      ->(m){ m[annotation_prefix + 'time'] = (Time.now.to_f * 1000).to_i; m },
-      ->(m){ m[annotation_prefix + 'msg_uuid'] = SecureRandom.uuid; m },
-      ->(m){ m[annotation_prefix + 'trace'] ||= SecureRandom.uuid; m }
+      ->(m){ m[@time_key] = (Time.now.to_f * 1000).to_i; m },
+      ->(m){ m[@msg_uuid_key] = SecureRandom.uuid; m },
+      ->(m){ m[@trace_key] ||= SecureRandom.uuid; m }
     ])
 
     @stats = { '.dead' => 0 }
@@ -76,14 +83,14 @@ class TinyBus
     @subs[topic] << subber
     @stats[topic] ||= 0
 
-    msg({ '.topic' => 'sub', 'to_topic' => topic, 'subber' => subber.to.s })
+    msg({ @topic_key => 'sub', 'to_topic' => topic, 'subber' => subber.to_s })
   end
 
   # removes a subscriber from a topic
   def unsub(topic, subber)
     @subs[topic]&.delete(subber)
 
-    msg({ '.topic' => 'unsub', 'from_topic' => topic, 'subber' => subber.to.s })
+    msg({ @topic_key => 'unsub', 'from_topic' => topic, 'subber' => subber.to_s })
   end
 
   # takes an incoming message and distributes it to subscribers
@@ -101,11 +108,11 @@ class TinyBus
     msg = @annotator.pipe(msg)
     msg = @translator&.pipe(msg) || msg
 
-    topic = msg['topic']
+    topic = msg[@topic_key]
 
     subbers = @subs[topic]
 
-    if subbers
+    if (subbers&.length || 0) > 0
       @stats[topic] += 1
       subbers.each{|s| s.msg(msg) }
       @log.sent msg
@@ -113,7 +120,7 @@ class TinyBus
       if @raise_on_dead
         raise TinyBus::DeadMsgError.new("Could not deliver message to topic `#{topic}'")
       else
-        @stats['.dead'] += 1
+        @stats[@dead_key] += 1
         @dead.dead msg
       end
     end
