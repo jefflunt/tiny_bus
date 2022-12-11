@@ -28,10 +28,6 @@ require 'tiny_pipe'
 #   TinyBus.new(raise_on_dead: true)                   # strict mode for undeliverable messages, defaults to false
 class TinyBus
   ANNOTATION_PREFIX_DEFAULT = '.'
-  LOGGING_LEVELS = {
-    'sent' => 'SENT',
-    'dead' => 'DEAD'
-  }.freeze
 
   # log:
   #   if specified, it should be a TinyLog instance
@@ -56,15 +52,8 @@ class TinyBus
   #   default: '.'
   #   if specified, the annotated message attributes ('.time', '.msg_uuid', and
   #   '.trace') will have the dot ('.') replaced with the specified prefix text
-  # logging_overrides:
-  #   default: LOGGING_LEVELS
-  #   allows you to specify a Hash of overrides of the logging levels for
-  #   'SENT' and 'DEAD' message delivery; useful if the consuming application
-  #   wants to use its own logging levels, or you just want the labels changed
-  #   for some reason
   def initialize(log: nil, dead: nil, translator: nil, raise_on_dead: false,
-                 annotation_prefix: ANNOTATION_PREFIX_DEFAULT,
-                 logging_overrides: LOGGING_LEVELS)
+                 annotation_prefix: ANNOTATION_PREFIX_DEFAULT)
     @subs = {}
     @translator = translator
 
@@ -84,8 +73,6 @@ class TinyBus
     @log = log || TinyLog.new($stdout)
     @dead = dead || TinyLog.new($stderr)
     @raise_on_dead = raise_on_dead
-    @sent_level = logging_overrides['sent'] || LOGGING_LEVELS['sent']
-    @dead_level = logging_overrides['dead'] || LOGGING_LEVELS['dead']
   end
 
   # adds a subscriber to a topic
@@ -110,9 +97,10 @@ class TinyBus
   #
   # msg: the incoming message to be distributed
   # lvl (optional): the logging level
+  #   default: 'info'
   #
-  # NOTE: it modifies the incoming msg object in place in order to avoid
-  # unnecessary object allocations
+  # NOTE: this method modifies the incoming msg object in place in order to
+  # avoid unnecessary object allocations
   #
   # NOTE: keys that begin with dot (.), such as '.time' are reserved for
   # TinyBus and show not be altered by outside code, otherwise undefined
@@ -128,13 +116,13 @@ class TinyBus
     if (subbers&.length || 0) > 0
       @stats[topic] += 1
       subbers.each{|s| s.msg(msg) }
-      @log.send(@sent_level, msg)
+      @log.send(lvl, "S #{msg}")
     else
       if @raise_on_dead
         raise TinyBus::DeadMsgError.new("Could not deliver message to topic `#{topic}'")
       else
         @stats[@dead_key] += 1
-        @dead.send(@dead_level, msg)
+        @dead.send(lvl, "D #{msg}")
       end
     end
   end
