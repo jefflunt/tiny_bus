@@ -75,8 +75,8 @@ class TinyBus
     @trace_key = "#{annotation_prefix}trace"
 
     @annotator = TinyPipe.new([
-      ->(m){ m[@time_key] = (Time.now.to_f * 1000).to_i; m },
-      ->(m){ m[@msg_uuid_key] = SecureRandom.uuid; m },
+      ->(m){ m[@time_key] ||= (Time.now.to_f * 1000).to_i; m },
+      ->(m){ m[@msg_uuid_key] ||= SecureRandom.uuid; m },
       ->(m){ m[@trace_key] ||= SecureRandom.uuid; m }
     ])
 
