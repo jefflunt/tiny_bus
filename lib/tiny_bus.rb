@@ -95,7 +95,7 @@ class TinyBus
 
   # takes an incoming message and distributes it to subscribers
   #
-  # msg: the incoming message to be distributed
+  # msg: the incoming message to be distributed, must be a Ruby Hash
   # lvl (optional): the logging level
   #   default: 'info'
   #
@@ -105,7 +105,7 @@ class TinyBus
   # NOTE: keys that begin with dot (.), such as '.time' are reserved for
   # TinyBus and show not be altered by outside code, otherwise undefined
   # behavior may result.
-  def msg(msg, lvl='info')
+  def msg(msg, lvl=:info)
     msg = @annotator.pipe(msg)
     msg = @translator&.pipe(msg) || msg
 
