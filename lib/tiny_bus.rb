@@ -83,14 +83,18 @@ class TinyBus
     @subs[topic] << subber
     @stats[topic] ||= 0
 
-    msg({ @topic_key => 'sub', 'to_topic' => topic, 'subber' => subber.to_s }, 'TINYBUS-SUB')
+    msg({ @topic_key => 'sub', 'to_topic' => topic, 'subber' => _to_subber_id(subber) }, 'TINYBUS-SUB')
   end
 
   # removes a subscriber from a topic
   def unsub(topic, subber)
     @subs[topic]&.delete(subber)
 
-    msg({ @topic_key => 'unsub', 'from_topic' => topic, 'subber' => subber.to_s }, 'TINYBUS-UNSUB')
+    msg({ @topic_key => 'unsub', 'from_topic' => topic, 'subber' => _to_subber_id(subber) }, 'TINYBUS-UNSUB')
+  end
+
+  def _to_subber_id(subber)
+    "#{subber.class.name}@#{subber.object_id}"
   end
 
   # takes an incoming message and distributes it to subscribers
