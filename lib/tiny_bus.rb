@@ -137,6 +137,8 @@ class TinyBus
   def to_s
     <<~DEBUG
     TinyBus stats: #{@subs.keys.length > 0 ? "\n  " + @stats.keys.sort.map{|t| "#{t.rjust(12)}: #{@stats[t]}" }.join("\n  ") : '<NONE>'}
+    Topics & Subscribers:
+      #{@subs.map{|topic, subbers| "#{topic}\n    #{subbers.map(&:to_s).join("\n    ")}" }.join("\n  ") }
     DEBUG
   end
 end
