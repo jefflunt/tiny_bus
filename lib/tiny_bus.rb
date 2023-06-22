@@ -57,6 +57,7 @@ class TinyBus
     @subs = {}
     @translator = translator
 
+    @total_key = "#{annotation_prefix}total"
     @dead_key = "#{annotation_prefix}dead"
     @topic_key = "#{annotation_prefix}topic"
     @time_key = "#{annotation_prefix}time"
@@ -69,9 +70,9 @@ class TinyBus
       ->(m){ m[@trace_key] ||= SecureRandom.uuid; m }
     ])
 
-    @stats = { '.dead' => 0 }
-    @log = log || TinyLog.new($stdout)
-    @dead = dead || TinyLog.new($stderr)
+    @stats = { @total_key => 0, @dead_key => 0 }
+    @log = log || TinyLog.new(filename: $stdout)
+    @dead = dead || TinyLog.new(filename: $stderr)
     @raise_on_dead = raise_on_dead
   end
 
@@ -117,6 +118,7 @@ class TinyBus
 
     subbers = @subs[topic]
 
+    @stats[@total_key] += 1
     if (subbers&.length || 0) > 0
       @stats[topic] += 1
       subbers.each{|s| s.msg(msg) }
@@ -131,12 +133,18 @@ class TinyBus
     end
   end
 
+  # returns a #dup of the internal statistics which track the number of
+  # messages sent to each topic, the dead queue, and total messages
+  def stats
+    @stats.dup
+  end
+
   # helpful for debugging, gives you a count of the number of messages sent to
   # each topic, including the .dead topic, which is where messages go where
   # there are no subscribes for a given topic
   def to_s
     <<~DEBUG
-    TinyBus stats: #{@subs.keys.length > 0 ? "\n  " + @stats.keys.sort.map{|t| "#{t.rjust(12)}: #{@stats[t]}" }.join("\n  ") : '<NONE>'}
+    TinyBus stats: #{@stats.keys.length > 0 ? "\n  " + @stats.keys.sort.map{|t| "#{t.rjust(12)}: #{@stats[t]}" }.join("\n  ") : '<NONE>'}
     Topics & Subscribers:
       #{@subs.map{|topic, subbers| "#{topic}\n    #{subbers.map(&:to_s).join("\n    ")}" }.join("\n  ") }
     DEBUG

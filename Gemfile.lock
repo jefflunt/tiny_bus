@@ -1,0 +1,21 @@
+PATH
+  remote: .
+  specs:
+    tiny_bus (3.6.0)
+      tiny_log
+      tiny_pipe
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    tiny_log (2.0.0)
+    tiny_pipe (1.0.1)
+
+PLATFORMS
+  x86_64-darwin-21
+
+DEPENDENCIES
+  tiny_bus!
+
+BUNDLED WITH
+   2.3.14
