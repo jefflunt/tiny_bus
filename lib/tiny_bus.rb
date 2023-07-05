@@ -115,12 +115,12 @@ class TinyBus
     msg = @translator&.pipe(msg) || msg
 
     topic = msg[@topic_key]
-
     subbers = @subs[topic]
 
+    @stats[topic] ||= 0
+    @stats[topic] += 1
     @stats[@total_key] += 1
     if (subbers&.length || 0) > 0
-      @stats[topic] += 1
       subbers.each{|s| s.msg(msg) }
       @log.send(lvl, "S #{msg}")
     else
