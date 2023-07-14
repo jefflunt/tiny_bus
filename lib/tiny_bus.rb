@@ -118,8 +118,8 @@ class TinyBus
     subbers = @subs[topic]
 
     @stats[topic] ||= 0
-    @stats[topic] += 1
     @stats[@total_key] += 1
+    @stats[topic] += 1
     if (subbers&.length || 0) > 0
       subbers.each{|s| s.msg(msg) }
       @log.send(lvl, "S #{msg}")
@@ -146,7 +146,7 @@ class TinyBus
     <<~DEBUG
     TinyBus stats: #{@stats.keys.length > 0 ? "\n  " + @stats.keys.sort.map{|t| "#{t.rjust(12)}: #{@stats[t]}" }.join("\n  ") : '<NONE>'}
     Topics & Subscribers:
-      #{@subs.map{|topic, subbers| "#{topic}\n    #{subbers.map(&:to_s).join("\n    ")}" }.join("\n  ") }
+      #{@subs.map{|topic, subbers| "#{topic}:\n    #{subbers.map(&:to_s).join("\n    ")}" }.join("\n  ") }
     DEBUG
   end
 end
