@@ -1,3 +1,4 @@
+require 'set'
 require 'time'
 require 'set'
 require 'securerandom'
@@ -29,6 +30,8 @@ require 'tiny_pipe'
 class TinyBus
   ANNOTATION_PREFIX_DEFAULT = '.'
 
+  attr_reader :dead_topics
+
   # log:
   #   if specified, it should be a TinyLog instance
   #   if not specified, it will create a new TinyLog instance for $stdout
@@ -55,6 +58,7 @@ class TinyBus
   def initialize(log: nil, dead: nil, translator: nil, raise_on_dead: false,
                  annotation_prefix: ANNOTATION_PREFIX_DEFAULT)
     @subs = {}
+    @dead_topics = Set.new
     @translator = translator
 
     @total_key = "#{annotation_prefix}total"
@@ -80,6 +84,7 @@ class TinyBus
   def sub(topic, subber)
     raise TinyBus::SubscriberDoesNotMsg.new("The specified subscriber type `#{subber.class.inspect}' does not respond to #msg") unless subber.respond_to?(:msg)
 
+    @dead_topics.delete(topic)
     @subs[topic] ||= Set.new
     @subs[topic] << subber
     @stats[topic] ||= 0
@@ -90,6 +95,7 @@ class TinyBus
   # removes a subscriber from a topic
   def unsub(topic, subber)
     @subs[topic]&.delete(subber)
+    @dead_topics << topic if @subs[topic].empty?
 
     msg({ @topic_key => 'unsub', 'from_topic' => topic, 'subber' => _to_subber_id(subber) }, 'TINYBUS-UNSUB')
   end
@@ -128,6 +134,7 @@ class TinyBus
         raise TinyBus::DeadMsgError.new("Could not deliver message to topic `#{topic}'")
       else
         @stats[@dead_key] += 1
+        @dead_topics << topic
         @dead.send(lvl, "D #{msg}")
       end
     end
@@ -144,9 +151,12 @@ class TinyBus
   # there are no subscribes for a given topic
   def to_s
     <<~DEBUG
-    TinyBus stats: #{@stats.keys.length > 0 ? "\n  " + @stats.keys.sort.map{|t| "#{t.rjust(12)}: #{@stats[t]}" }.join("\n  ") : '<NONE>'}
-    Topics & Subscribers:
-      #{@subs.map{|topic, subbers| "#{topic}:\n    #{subbers.map(&:to_s).join("\n    ")}" }.join("\n  ") }
+      TinyBus stats: #{@stats.keys.length > 0 ? "\n  " + @stats.keys.sort.map{|t| "#{t.rjust(12)}: #{@stats[t]}" }.join("\n  ") : '<NONE>'}
+      Dead topics: [
+        #{@dead_topics.sort.each_slice(3).map{|slice| slice.join(', ') }.join("\n  ")}
+      ]
+      Topics & Subscribers:
+        #{@subs.map{|topic, subbers| "#{topic}:\n    #{subbers.map(&:to_s).join("\n    ")}" }.join("\n  ") }
     DEBUG
   end
 end
