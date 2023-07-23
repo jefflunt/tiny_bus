@@ -127,7 +127,12 @@ class TinyBus
     @stats[@total_key] += 1
     @stats[topic] += 1
     if (subbers&.length || 0) > 0
-      subbers.each{|s| s.msg(msg) }
+      # cloning is necessary, because sending messanges may result in new
+      # subscribers to the same topic we're iterating over right now. in that
+      # situation we would run into a RuntimeError that prevented the
+      # modification of the Set we're iterating over to send messages.
+      subbers.clone.each{|s| s.msg(msg) }
+
       @log.send(lvl, "S #{msg}")
     else
       if @raise_on_dead
