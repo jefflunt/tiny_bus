@@ -81,15 +81,22 @@ class TinyBus
   end
 
   # adds a subscriber to a topic
+  #
+  # - topic: either a String, or an array of String
+  # - subber: an object that responds to #msg that can receive messages
   def sub(topic, subber)
     raise TinyBus::SubscriberDoesNotMsg.new("The specified subscriber type `#{subber.class.inspect}' does not respond to #msg") unless subber.respond_to?(:msg)
 
-    @dead_topics.delete(topic)
-    @subs[topic] ||= Set.new
-    @subs[topic] << subber
-    @stats[topic] ||= 0
+    topics = topic.is_a?(Array) ? topic : [topic]
 
-    msg({ @topic_key => 'sub', 'to_topic' => topic, 'subber' => _to_subber_id(subber) }, 'TINYBUS-SUB')
+    topics.each do |t|
+      @dead_topics.delete(t)
+      @subs[t] ||= Set.new
+      @subs[t] << subber
+      @stats[t] ||= 0
+
+      msg({ @topic_key => 'sub', 'to_topic' => t, 'subber' => _to_subber_id(subber) }, 'TINYBUS-SUB')
+    end
   end
 
   # removes a subscriber from a topic
