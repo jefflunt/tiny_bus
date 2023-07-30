@@ -101,10 +101,14 @@ class TinyBus
 
   # removes a subscriber from a topic
   def unsub(topic, subber)
-    @subs[topic]&.delete(subber)
-    @dead_topics << topic if @subs[topic].empty?
+    topics = topic.is_a?(Array) ? topic : [topic]
 
-    msg({ @topic_key => 'unsub', 'from_topic' => topic, 'subber' => _to_subber_id(subber) }, 'TINYBUS-UNSUB')
+    topics.each do |t|
+      @subs[t]&.delete(subber)
+      @dead_topics << t if @subs[t].empty?
+
+      msg({ @topic_key => 'unsub', 'from_topic' => t, 'subber' => _to_subber_id(subber) }, 'TINYBUS-UNSUB')
+    end
   end
 
   def _to_subber_id(subber)
