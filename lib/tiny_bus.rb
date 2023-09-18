@@ -105,7 +105,7 @@ class TinyBus
 
     topics.each do |t|
       @subs[t]&.delete(subber)
-      @dead_topics << t if @subs[t].empty?
+      @dead_topics << t if @subs[t]&.empty?
 
       msg({ @topic_key => 'unsub', 'from_topic' => t, 'subber' => _to_subber_id(subber) }, 'TINYBUS-UNSUB')
     end
